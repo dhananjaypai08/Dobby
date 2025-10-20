@@ -22,7 +22,11 @@ contract CounterTest is Test {
         for (uint256 i = 0; i < x; i++) {
             counter.inc();
         }
-        assertEq(counter.total().get(), x, "Value after calling inc x times should be x");
+        assertEq(
+            counter.total().get(),
+            x,
+            "Value after calling inc x times should be x"
+        );
     }
 
     function test_IncByZero() public {

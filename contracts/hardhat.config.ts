@@ -26,17 +26,13 @@ const config: HardhatUserConfig = {
       type: "edr-simulated",
       chainType: "l1",
     },
-    // arcologyTestnet: {
-    //   type: "http",
-    //   chainType: "l1",
-    //   url: "https://sepolia.infura.io/v3/2WCbZ8YpmuPxUtM6PzbFOfY5k4B",
-    //   accounts: [configVariable("PRIVATE_KEY")]
-    // },
-    sepolia: {
+    arcologyTestnet: {
       type: "http",
       chainType: "l1",
-      url: "https://sepolia.infura.io/v3/2WCbZ8YpmuPxUtM6PzbFOfY5k4B",
+      url: "http://65.109.227.117:8545",
       accounts: [configVariable("PRIVATE_KEY")],
+      gasPrice: 1_000_000_000,
+      gasMultiplier: 1.2,
     },
   },
 };
