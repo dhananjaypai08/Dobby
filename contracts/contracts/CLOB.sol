@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -26,7 +26,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
 
     AddressBooleanMap public allowedTokens = new AddressBooleanMap();
 
-    constructor() Ownable(msg.sender) {
+    constructor() Ownable() {
         allowedTokens.set(LAMAL, true);
         allowedTokens.set(ORIGAMI, true);
     }
