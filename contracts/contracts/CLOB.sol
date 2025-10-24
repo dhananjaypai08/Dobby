@@ -63,6 +63,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         _isValidToken(order.quoteToken);
 
         orderBook.push(_data);
+        totalOrders.add(1);
         if (order.isBuy) {
             totalbuyOrders.add(1);
             buyOrders.push(_data);
