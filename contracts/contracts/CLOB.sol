@@ -8,6 +8,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {AddressBooleanMap} from "@arcologynetwork/concurrentlib/lib/map/AddressBoolean.sol";
 import {Bytes} from "@arcologynetwork/concurrentlib/lib/array/Bytes.sol";
 import {U256Cumulative} from "@arcologynetwork/concurrentlib/lib/commutative/U256Cum.sol";
+import {Multiprocess} from "@arcologynetwork/concurrentlib/lib/multiprocess/Multiprocess.sol";
 import {Order} from "./types/CLOB.sol";
 import {Address} from "./constants/Address.sol";
 import {ICLOB} from "./interfaces/ICLOB.sol";
@@ -27,6 +28,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
     U256Cumulative private totalsellOrders =
         new U256Cumulative(0, type(uint256).max);
     mapping(address => Bytes) private userOrders;
+    uint32 public constant GAS_LIMIT = 50_000;
 
     AddressBooleanMap public allowedTokens = new AddressBooleanMap();
 
@@ -74,66 +76,138 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         uint256 newIdx = order.isBuy
             ? totalbuyOrders.get() - 1
             : totalsellOrders.get() - 1;
-        _matchOrder(order.isBuy, order, newIdx);
+        _parallelMatch(order.isBuy, newIdx, order.price, order.baseToken, order.quoteToken);
         userOrders[msg.sender].push(_data);
     }
 
-    /// @dev Matches a new order against the order book
-    /// @param isBuy True if buy order, false if sell
-    /// @param order The order struct
-    /// @param idx The index of the new order
-    function _matchOrder(bool isBuy, Order memory order, uint256 idx) internal {
-        if (isBuy) {
-            for (uint256 i; i < totalsellOrders.get(); ) {
-                Order memory sellOrder = abi.decode(sellOrders.get(i), (Order));
-                if (
-                    sellOrder.price <= order.price &&
-                    sellOrder.amount.get() > 0 &&
-                    sellOrder.baseToken == order.baseToken &&
-                    sellOrder.quoteToken == order.quoteToken
-                ) {
-                    _fillOrder(idx, i);
-                    sellOrder = abi.decode(sellOrders.get(i), (Order));
-                    if (sellOrder.amount.get() == 0) {
-                        sellOrders.set(
-                            i,
-                            sellOrders.get(totalsellOrders.get() - 1)
-                        );
-                        sellOrders.delLast();
-                        totalsellOrders.sub(1);
-                        totalOrders.sub(1);
-                    } else {
-                        ++i;
-                    }
-                } else {
-                    ++i;
-                }
+    /// @dev Spawns parallel matching jobs for a new order using Multiprocess
+    /// @param isBuy True if the new order is a buy order
+    /// @param newIdx Index of the newly added order in its side array
+    /// @param price Limit price of the new order
+    /// @param baseToken Base token address
+    /// @param quoteToken Quote token address
+    function _parallelMatch(
+        bool isBuy,
+        uint256 newIdx,
+        uint256 price,
+        address baseToken,
+        address quoteToken
+    ) internal {
+        uint256 opposingCount = isBuy ? totalsellOrders.get() : totalbuyOrders.get();
+        if (opposingCount == 0) return;
+        Multiprocess mp = new Multiprocess(opposingCount);
+        for (uint256 i; i < opposingCount; ++i) {
+            if (isBuy) {
+                mp.addJob(
+                    GAS_LIMIT,
+                    0,
+                    address(this),
+                    abi.encodeWithSignature(
+                        "_mpTryBuy(uint256,uint256,uint256,address,address)",
+                        newIdx,
+                        i,
+                        price,
+                        baseToken,
+                        quoteToken
+                    )
+                );
+            } else {
+                mp.addJob(
+                    GAS_LIMIT,
+                    0,
+                    address(this),
+                    abi.encodeWithSignature(
+                        "_mpTrySell(uint256,uint256,uint256,address,address)",
+                        newIdx,
+                        i,
+                        price,
+                        baseToken,
+                        quoteToken
+                    )
+                );
             }
-        } else {
-            for (uint256 i; i < totalbuyOrders.get(); ) {
-                Order memory buyOrder = abi.decode(buyOrders.get(i), (Order));
-                if (
-                    buyOrder.price >= order.price &&
-                    buyOrder.amount.get() > 0 &&
-                    buyOrder.baseToken == order.baseToken &&
-                    buyOrder.quoteToken == order.quoteToken
-                ) {
-                    _fillOrder(i, idx);
-                    buyOrder = abi.decode(sellOrders.get(i), (Order));
-                    if (buyOrder.amount.get() == 0) {
-                        buyOrders.set(
-                            i,
-                            buyOrders.get(totalbuyOrders.get() - 1)
-                        );
-                        buyOrders.delLast();
-                        totalbuyOrders.sub(1);
-                        totalOrders.sub(1);
-                    } else {
-                        ++i;
-                    }
-                } else {
-                    ++i;
-                }
+        }
+        mp.run();
+    }
+
+    /// @notice Parallel job handler for a new buy order attempting to match a sell order
+    function _mpTryBuy(
+        uint256 buyIdx,
+        uint256 sellIdx,
+        uint256 buyPrice,
+        address baseToken,
+        address quoteToken
+    ) public {
+        if (sellIdx >= totalsellOrders.get()) return; // stale
+        if (buyIdx >= totalbuyOrders.get()) return; // already filled
+        Order memory buyOrder = abi.decode(buyOrders.get(buyIdx), (Order));
+        Order memory sellOrder = abi.decode(sellOrders.get(sellIdx), (Order));
+        if (
+            sellOrder.price <= buyPrice &&
+            buyOrder.amount.get() > 0 &&
+            sellOrder.amount.get() > 0 &&
+            sellOrder.baseToken == baseToken &&
+            sellOrder.quoteToken == quoteToken
+        ) {
+            _fillOrder(buyIdx, sellIdx);
+            if (sellOrder.amount.get() == 0) {
+                sellOrders.set(
+                    sellIdx,
+                    sellOrders.get(totalsellOrders.get() - 1)
+                );
+                sellOrders.delLast();
+                totalsellOrders.sub(1);
+                totalOrders.sub(1);
+            }
+            if (buyOrder.amount.get() == 0) {
+                buyOrders.set(
+                    buyIdx,
+                    buyOrders.get(totalbuyOrders.get() - 1)
+                );
+                buyOrders.delLast();
+                totalbuyOrders.sub(1);
+                totalOrders.sub(1);
+            }
+        }
+    }
+
+    /// @notice Parallel job handler for a new sell order attempting to match a buy order
+    function _mpTrySell(
+        uint256 sellIdx,
+        uint256 buyIdx,
+        uint256 sellPrice,
+        address baseToken,
+        address quoteToken
+    ) public {
+        if (buyIdx >= totalbuyOrders.get()) return;
+        if (sellIdx >= totalsellOrders.get()) return;
+        Order memory sellOrder = abi.decode(sellOrders.get(sellIdx), (Order));
+        Order memory buyOrder = abi.decode(buyOrders.get(buyIdx), (Order));
+        if (
+            buyOrder.price >= sellPrice &&
+            sellOrder.amount.get() > 0 &&
+            buyOrder.amount.get() > 0 &&
+            buyOrder.baseToken == baseToken &&
+            buyOrder.quoteToken == quoteToken
+        ) {
+            _fillOrder(buyIdx, sellIdx);
+            if (buyOrder.amount.get() == 0) {
+                buyOrders.set(
+                    buyIdx,
+                    buyOrders.get(totalbuyOrders.get() - 1)
+                );
+                buyOrders.delLast();
+                totalbuyOrders.sub(1);
+                totalOrders.sub(1);
+            }
+            if (sellOrder.amount.get() == 0) {
+                sellOrders.set(
+                    sellIdx,
+                    sellOrders.get(totalsellOrders.get() - 1)
+                );
+                sellOrders.delLast();
+                totalsellOrders.sub(1);
+                totalOrders.sub(1);
             }
         }
     }

@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "lint": "solhint 'contracts/*.sol'",
+    "benchmark": "npx hardhat run scripts/benchmark-clob.ts --network arcologyTestnet",
     "format:check": "prettier --list-different --plugin=prettier-plugin-solidity 'contracts/*.sol'",
     "format:fix": "prettier --write --plugin=prettier-plugin-solidity 'contracts/*.sol'",
     "slither:lint": "slither 'contracts/'",
