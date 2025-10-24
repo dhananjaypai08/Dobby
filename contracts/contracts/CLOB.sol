@@ -12,6 +12,10 @@ import {Order} from "./types/CLOB.sol";
 import {Address} from "./constants/Address.sol";
 import {ICLOB} from "./interfaces/ICLOB.sol";
 
+/// @title Parallelized Execution for Central Limit Order Book (CLOB)
+/// @author Dhananjay Pai
+/// @notice Implements a fully on-chain order book for token trading with concurrent matching
+/// @dev Uses custom concurrent data structures for order management
 contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
     Bytes private orderBook = new Bytes();
     U256Cumulative private totalOrders =
@@ -26,23 +30,31 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
 
     AddressBooleanMap public allowedTokens = new AddressBooleanMap();
 
+    /// @notice Initializes the CLOB and sets allowed tokens
     constructor() Ownable() {
         allowedTokens.set(LAMAL, true);
         allowedTokens.set(ORIGAMI, true);
     }
 
+    /// @dev Checks if a token is allowed for trading
+    /// @param _token The token address to check
     function _isValidToken(address _token) internal {
         if (!allowedTokens.get(_token)) {
             revert TokenNotValid(_token);
         }
     }
 
+    /// @dev Checks if a value is nonzero
+    /// @param amount The value to check
     function _checkPrice(uint256 amount) internal pure {
         if (amount == 0) {
             revert ZeroValue();
         }
     }
 
+    /// @notice Places a new order in the order book
+    /// @dev Decodes the order, validates, and adds to the book
+    /// @param _data ABI-encoded Order struct
     function placeOrder(bytes calldata _data) external nonReentrant {
         Order memory order = abi.decode(_data, (Order));
         _checkPrice(order.amount.get());
@@ -65,6 +77,10 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         userOrders[msg.sender].push(_data);
     }
 
+    /// @dev Matches a new order against the order book
+    /// @param isBuy True if buy order, false if sell
+    /// @param order The order struct
+    /// @param idx The index of the new order
     function _matchOrder(bool isBuy, Order memory order, uint256 idx) internal {
         if (isBuy) {
             for (uint256 i; i < totalsellOrders.get(); ) {
@@ -121,6 +137,9 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         }
     }
 
+    /// @dev Fills a matched buy and sell order, transfers tokens
+    /// @param buyOrderIdx Index of the buy order
+    /// @param sellOrderIdx Index of the sell order
     function _fillOrder(uint256 buyOrderIdx, uint256 sellOrderIdx) internal {
         Order memory buyOrder = abi.decode(buyOrders.get(buyOrderIdx), (Order));
         Order memory sellOrder = abi.decode(
@@ -165,6 +184,9 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         emit OrderFill(buyOrder.trader, sellOrder.trader, val, block.timestamp);
     }
 
+    /// @notice Returns all orders placed by a user
+    /// @param user The address of the user
+    /// @return Array of ABI-encoded Order structs
     function getUserOrders(address user) external returns (bytes[] memory) {
         Bytes container = userOrders[user];
         if (address(container) == address(0)) {
@@ -178,6 +200,8 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         return out;
     }
 
+    /// @notice Returns all buy orders in the book
+    /// @return Array of ABI-encoded Order structs
     function getAllBuyOrders() external returns (bytes[] memory) {
         uint256 len = totalbuyOrders.get();
         bytes[] memory out = new bytes[](len);
@@ -187,6 +211,8 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         return out;
     }
 
+    /// @notice Returns all sell orders in the book
+    /// @return Array of ABI-encoded Order structs
     function getAllSellOrders() external returns (bytes[] memory) {
         uint256 len = totalsellOrders.get();
         bytes[] memory out = new bytes[](len);
@@ -196,6 +222,8 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         return out;
     }
 
+    /// @notice Returns all orders in the book
+    /// @return Array of ABI-encoded Order structs
     function getAllOrders() external returns (bytes[] memory) {
         uint256 len = totalOrders.get();
         bytes[] memory out = new bytes[](len);

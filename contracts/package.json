@@ -11,8 +11,10 @@
     "test": "npx hardhat test"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.2",
     "@nomicfoundation/hardhat-ignition": "^3.0.3",
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-viem": "^3.0.0",
     "@types/chai": "^4.3.20",
     "@types/chai-as-promised": "^8.0.2",
     "@types/mocha": "^10.0.10",
@@ -28,6 +30,7 @@
   },
   "dependencies": {
     "@arcologynetwork/concurrentlib": "^2.2.1",
-    "@openzeppelin/contracts": "^4.9.5"
+    "@openzeppelin/contracts": "^4.9.5",
+    "viem": "^2.38.3"
   }
 }

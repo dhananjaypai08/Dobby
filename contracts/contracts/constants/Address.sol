@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+/// @title Address Constants
+/// @notice Provides constant addresses for tokens
+/// @author Dhananjay Pai
 contract Address {
-    address public constant ORIGAMI = 0x3E1fB648784836d639a50700Cca608F7cD488219;
-    address public constant LAMAL = 0xd2F008D1b27019aa97EdD70da26eca92C83E53d7;
+    /// @notice ORIGAMI token address
+    address public constant ORIGAMI = 0x3C34FC443c3Ab84146F19716FDd3fa9959ffB9DB;
+    /// @notice LAMAL token address
+    address public constant LAMAL = 0x5A1580A9894b89c6304f533139e2cCc01dB52425;
 }

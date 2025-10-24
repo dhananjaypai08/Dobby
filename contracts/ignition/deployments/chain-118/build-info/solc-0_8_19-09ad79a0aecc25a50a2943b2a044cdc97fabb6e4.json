@@ -1,6 +1,6 @@
 {
   "_format": "hh3-sol-build-info-1",
-  "id": "solc-0_8_19-8ba0ddc7f4d3c0a7cfe7fe56832409dcbaba1c55",
+  "id": "solc-0_8_19-09ad79a0aecc25a50a2943b2a044cdc97fabb6e4",
   "solcVersion": "0.8.19",
   "solcLongVersion": "0.8.19+commit.7dd6d404",
   "userSourceNameMap": {
@@ -50,7 +50,7 @@
         "content": "// SPDX-License-Identifier: MIT\n// OpenZeppelin Contracts (last updated v4.9.4) (utils/Context.sol)\n\npragma solidity ^0.8.0;\n\n/**\n * @dev Provides information about the current execution context, including the\n * sender of the transaction and its data. While these are generally available\n * via msg.sender and msg.data, they should not be accessed in such a direct\n * manner, since when dealing with meta-transactions the account sending and\n * paying for execution may not be the actual sender (as far as an application\n * is concerned).\n *\n * This contract is only required for intermediate, library-like contracts.\n */\nabstract contract Context {\n    function _msgSender() internal view virtual returns (address) {\n        return msg.sender;\n    }\n\n    function _msgData() internal view virtual returns (bytes calldata) {\n        return msg.data;\n    }\n\n    function _contextSuffixLength() internal view virtual returns (uint256) {\n        return 0;\n    }\n}\n"
       },
       "project/contracts/Token.sol": {
-        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.19;\n\nimport {ERC20} from \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport {Ownable} from \"@openzeppelin/contracts/access/Ownable.sol\";\n\ncontract Token is ERC20, Ownable {\n    constructor(\n        string memory _name,\n        string memory _symbol,\n        uint256 _initialSupply\n    ) ERC20(_name, _symbol) {\n        _mint(msg.sender, _initialSupply);\n    }\n}\n"
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.19;\n\nimport {ERC20} from \"@openzeppelin/contracts/token/ERC20/ERC20.sol\";\nimport {Ownable} from \"@openzeppelin/contracts/access/Ownable.sol\";\n\n/// @title Simple ERC20 Token\n/// @notice Basic ERC20 token with Ownable and initial supply\n/// @author Dhananjay Pai\ncontract Token is ERC20, Ownable {\n    /// @notice Deploys the token and mints initial supply\n    /// @param _name Name of the token\n    /// @param _symbol Symbol of the token\n    /// @param _initialSupply Initial supply to mint\n    constructor(\n        string memory _name,\n        string memory _symbol,\n        uint256 _initialSupply\n    ) ERC20(_name, _symbol) {\n        _mint(msg.sender, _initialSupply);\n    }\n}\n"
       }
     }
   }
