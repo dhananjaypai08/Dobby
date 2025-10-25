@@ -78,7 +78,7 @@ export function Footer() {
         {/* Bottom section */}
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <p>
-            © {currentYear} Dobby DEX. Built on Arcology Network.
+            © {currentYear} Dobby CLOB. Built on Arcology Network.
           </p>
           <div className="flex items-center gap-6">
             <Link href="/terms">
@@ -108,11 +108,11 @@ const resourceLinks = [
   { label: "Documentation", href: "https://docs.pyth.network" },
   { label: "Pyth Network", href: "https://pyth.network" },
   { label: "Arcology Network", href: "https://arcology.network" },
-  { label: "GitHub", href: "https://github.com" },
+  { label: "GitHub", href: "https://github.com/dhananjaypai08/Dobby" },
 ]
 
 const communityLinks = [
-  { label: "Discord", href: "#" },
-  { label: "Twitter", href: "#" },
-  { label: "Telegram", href: "#" },
+  { label: "Discord", href: "https://discord.gg/dhananjay1713" },
+  { label: "Twitter", href: "https://x.com/dhananjaypai08" },
+  { label: "Telegram", href: "https://t.me/dhananjaypai" },
 ]
