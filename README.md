@@ -1,4 +1,4 @@
-# Dobby: Fully On-Chain Parallel CLOB on Arcology
+# Dobby: Fully On-Chain Parallel Execution CLOB
 
 ## Overview
 Dobby is a fully on-chain central limit order book (CLOB) designed natively for Arcology's parallel execution environment. Instead of serial transaction processing, Dobby decomposes order lifecycle operations into concurrency-safe segments that Arcology's deterministic scheduler can execute in parallel. This unlocks higher throughput, lower tail latency for matching, and improved capital efficiency without resorting to off-chain match engines or sequencer trust assumptions.
@@ -10,7 +10,6 @@ The system leverages `@arcologynetwork/concurrentlib` to express conflict domain
 - Deterministic parallelization primitives via Arcology concurrentlib
 - Price-level sharding and account delta isolation reduce write contention
 - Benchmarkable in-script (Hardhat) against devnet with reproducible scenarios
-- Extensible type layer (`types/CLOB.sol`) enabling structured matching and risk hooks
 
 ## Parallelization Model
 Arcology's execution engine analyzes transactional read/write sets. Dobby aligns with this by structuring storage such that:
@@ -21,7 +20,6 @@ Arcology's execution engine analyzes transactional read/write sets. Dobby aligns
 4. Matching loops emit balance deltas staged per user, then a commit phase applies netted adjustments atomically
 5. Cancellations and partial fills only touch the narrow slice of state corresponding to the affected level and user delta entries
 
-`@arcologynetwork/concurrentlib` augments this by providing concurrency-safe accumulation constructs so independent matching segments can co-exist without non-deterministic interleaving.
 
 ## Deployed (Arcology Dev Chain 118)
 These addresses come from `contracts/ignition/deployments/chain-118/deployed_addresses.json`.
