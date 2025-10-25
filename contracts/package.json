@@ -11,7 +11,7 @@
     "compile": "npx hardhat build",
     "deploy:token": "npx hardhat ignition deploy ./ignition/modules/Token.ts --network arcologyTestnet",
     "deploy:clob": "npx hardhat ignition deploy ./ignition/modules/CLOB.ts --network arcologyTestnet",
-    "test": "npx hardhat test"
+    "test": "npx hardhat test solidity"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ethers": "^4.0.2",

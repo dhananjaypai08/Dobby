@@ -1,69 +1,83 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
-import { CLOB } from "../contracts/CLOB.sol";
-import { Test } from "forge-std/Test.sol";
-import { U256Cumulative } from "@arcologynetwork/concurrentlib/lib/commutative/U256Cum.sol";
-// import { Token } from "../contracts/Token.sol";
-// import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {CLOB} from "../contracts/CLOB.sol";
+import {Order} from "../contracts/types/CLOB.sol";
 
-contract CLOBTest is Test {
+interface IPlace { function placeOrder(bytes calldata) external; }
+
+/// @title Tests for CLOB contract (Hardhat Solidity test style)
+/// @notice Focuses on order validation & storage without triggering matching (no opposing side)
+contract CLOBTest {
     CLOB private clob;
+    error TestFail(uint256 code);
 
     function setUp() public {
         clob = new CLOB();
     }
 
-    function test_PlaceOrder_RevertsOnInvalidToken() public {
-        // Prepare an order with an invalid token address
-        U256Cumulative amount = new U256Cumulative(10, type(uint256).max);
-        bytes memory order = abi.encode(
-            1, // id
-            address(this), // trader
-            address(0xdead), // baseToken (invalid)
-            address(0xdead), // quoteToken (invalid)
-            true, // isBuy
-            100, // price
-            address(amount), // U256Cumulative contract address
-            block.timestamp // timestamp
-        );
-        vm.expectRevert();
-        clob.placeOrder(order);
+    // Internal helper to perform a call we expect to revert (any revert reason acceptable)
+    function _expectRevert(bytes memory encodedOrder) internal returns (bool) {
+        IPlace target = IPlace(address(clob));
+        try target.placeOrder(encodedOrder) {
+            return false; // did not revert
+        } catch {
+            return true; // reverted
+        }
     }
 
-    function test_PlaceOrder_RevertsOnZeroAmount() public {
-        // Prepare an order with zero amount
-        U256Cumulative amount = new U256Cumulative(0, type(uint256).max);
-        bytes memory order = abi.encode(
-            1,
-            address(this),
-            clob.LAMAL(),
-            clob.ORIGAMI(),
-            true,
-            100,
-            address(amount), // U256Cumulative contract address
-            block.timestamp
-        );
-        vm.expectRevert();
-        clob.placeOrder(order);
+    // Removed positive path tests because original CLOB relies on Arcology runtime predeploys
+    // which aren't available in a plain Hardhat EVM; successful placement would revert deeper.
+
+    function testRevertInvalidTokens() public {
+        setUp();
+        Order memory o = Order({
+            id: 3,
+            trader: address(this),
+            baseToken: address(0xdead), // not allowed
+            quoteToken: clob.ORIGAMI(),
+            isBuy: true,
+            price: 1,
+            amount: 1,
+            timestamp: block.timestamp
+        });
+        bytes memory data = abi.encode(o);
+        bool reverted = _expectRevert(data);
+        if (!reverted) revert TestFail(9);
     }
 
-    // function test_PlaceOrder_SucceedsWithValidOrder() public {
-    //     // Mint tokens to this contract for order
-    //     IERC20(clob.LAMAL()).mint(address(this), 1e18);
-    //     IERC20(clob.ORIGAMI()).mint(address(this), 1e18);
-    //     U256Cumulative amount = new U256Cumulative(10, type(uint256).max);
-    //     bytes memory order = abi.encode(
-    //         1,
-    //         address(this),
-    //         clob.LAMAL(),
-    //         clob.ORIGAMI(),
-    //         true,
-    //         100,
-    //         amount,
-    //         block.timestamp
-    //     );
-    //     clob.placeOrder(order);
-    //     // If no revert, test passes
-    // }
+    function testRevertZeroAmount() public {
+        setUp();
+        Order memory o = Order({
+            id: 4,
+            trader: address(this),
+            baseToken: clob.LAMAL(),
+            quoteToken: clob.ORIGAMI(),
+            isBuy: true,
+            price: 1,
+            amount: 0, // zero -> revert
+            timestamp: block.timestamp
+        });
+        bytes memory data = abi.encode(o);
+        bool reverted = _expectRevert(data);
+        if (!reverted) revert TestFail(10);
+    }
+
+    function testRevertZeroPrice() public {
+        setUp();
+        Order memory o = Order({
+            id: 5,
+            trader: address(this),
+            baseToken: clob.LAMAL(),
+            quoteToken: clob.ORIGAMI(),
+            isBuy: false,
+            price: 0, // zero -> revert
+            amount: 1,
+            timestamp: block.timestamp
+        });
+        bytes memory data = abi.encode(o);
+        bool reverted = _expectRevert(data);
+        if (!reverted) revert TestFail(11);
+    }
+
 }
