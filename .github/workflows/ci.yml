@@ -15,35 +15,35 @@ jobs:
           node-version: '24'
       - run: npm install
         shell: bash
-      - run: npm install
-        working-directory: ./contracts
-        shell: bash
 
   test:
     runs-on: macos-latest
-    needs: install
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install
+        working-directory: ./contracts
+        shell: bash
       - run: npm test
         shell: bash
 
   benchmark:
     runs-on: macos-latest
-    needs: install
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install
+        working-directory: ./contracts
+        shell: bash
       - run: npm run benchmark
         shell: bash
 
   lint:
     runs-on: macos-latest
-    needs: install
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
