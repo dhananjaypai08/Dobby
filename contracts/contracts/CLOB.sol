@@ -59,7 +59,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
     /// @param _data ABI-encoded Order struct
     function placeOrder(bytes calldata _data) external nonReentrant {
         Order memory order = abi.decode(_data, (Order));
-        _checkPrice(order.amount.get());
+        _checkPrice(order.amount);
         _checkPrice(order.price);
         _isValidToken(order.baseToken);
         _isValidToken(order.quoteToken);
@@ -144,13 +144,13 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         Order memory sellOrder = abi.decode(sellOrders.get(sellIdx), (Order));
         if (
             sellOrder.price <= buyPrice &&
-            buyOrder.amount.get() > 0 &&
-            sellOrder.amount.get() > 0 &&
+            buyOrder.amount > 0 &&
+            sellOrder.amount > 0 &&
             sellOrder.baseToken == baseToken &&
             sellOrder.quoteToken == quoteToken
         ) {
             _fillOrder(buyIdx, sellIdx);
-            if (sellOrder.amount.get() == 0) {
+            if (sellOrder.amount == 0) {
                 sellOrders.set(
                     sellIdx,
                     sellOrders.get(totalsellOrders.get() - 1)
@@ -159,7 +159,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
                 totalsellOrders.sub(1);
                 totalOrders.sub(1);
             }
-            if (buyOrder.amount.get() == 0) {
+            if (buyOrder.amount == 0) {
                 buyOrders.set(
                     buyIdx,
                     buyOrders.get(totalbuyOrders.get() - 1)
@@ -185,13 +185,13 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
         Order memory buyOrder = abi.decode(buyOrders.get(buyIdx), (Order));
         if (
             buyOrder.price >= sellPrice &&
-            sellOrder.amount.get() > 0 &&
-            buyOrder.amount.get() > 0 &&
+            sellOrder.amount > 0 &&
+            buyOrder.amount > 0 &&
             buyOrder.baseToken == baseToken &&
             buyOrder.quoteToken == quoteToken
         ) {
             _fillOrder(buyIdx, sellIdx);
-            if (buyOrder.amount.get() == 0) {
+            if (buyOrder.amount == 0) {
                 buyOrders.set(
                     buyIdx,
                     buyOrders.get(totalbuyOrders.get() - 1)
@@ -200,7 +200,7 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
                 totalbuyOrders.sub(1);
                 totalOrders.sub(1);
             }
-            if (sellOrder.amount.get() == 0) {
+            if (sellOrder.amount == 0) {
                 sellOrders.set(
                     sellIdx,
                     sellOrders.get(totalsellOrders.get() - 1)
@@ -222,10 +222,10 @@ contract CLOB is Ownable, ReentrancyGuard, Address, ICLOB {
             (Order)
         );
 
-        uint256 val = Math.min(buyOrder.amount.get(), sellOrder.amount.get());
+        uint256 val = Math.min(buyOrder.amount, sellOrder.amount);
 
-        buyOrder.amount.sub(val);
-        sellOrder.amount.sub(val);
+        buyOrder.amount -= val;
+        sellOrder.amount -= val;
 
         buyOrders.set(buyOrderIdx, abi.encode(buyOrder));
         sellOrders.set(sellOrderIdx, abi.encode(sellOrder));

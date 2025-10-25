@@ -1,128 +1,154 @@
 "use client"
 
-import { useState, useCallback } from "react"
-import { Button } from "../../components/ui/button"
-import { Input } from "../../components/ui/input"
-import { Label } from "../../components/ui/label"
+import { useState, useEffect } from "react"
 import { useAccount } from "wagmi"
-import { formatNumber } from "../../lib/utils"
+import { Button } from "../ui/button"
+import { Input } from "../ui/input"
+import { Label } from "../ui/label"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs"
+import { usePythPrice } from "../../lib/pyth/hooks"
+import { usePlaceOrder } from "../../hooks/useCLOB"
+import { TOKENS, CONTRACTS } from "../../lib/contracts/addresses"
 
 interface OrderFormProps {
-  type: "buy" | "sell"
+  tokenPair: "LAMAL" | "ORIGAMI"
 }
 
-export function OrderForm({ type }: OrderFormProps) {
-  const { isConnected } = useAccount()
-  const [price, setPrice] = useState("")
-  const [amount, setAmount] = useState("")
-  const [isPlacingOrder, setIsPlacingOrder] = useState(false)
+export function OrderForm({ tokenPair }: OrderFormProps) {
+  const [orderType, setOrderType] = useState<"buy" | "sell">("buy")
+  const [amount, setAmount] = useState("") // Amount entered in ACOL units
+  const [usdNotional, setUsdNotional] = useState("")
+  
+  const { address, isConnected } = useAccount()
+  const { placeOrder, isPlacing, isApproving, step } = usePlaceOrder()
+  
+  // Get Pyth oracle price for the selected token
+  const token = TOKENS[tokenPair]
+  const { price: oraclePrice, loading: priceLoading } = usePythPrice(token.pythFeedId)
 
-  const total = price && amount ? (parseFloat(price) * parseFloat(amount)).toFixed(2) : "0.00"
+  // Calculate total when amount changes
+  useEffect(() => {
+    if (amount && oraclePrice) {
+      const totalValue = (parseFloat(amount) * parseFloat(oraclePrice)).toFixed(2)
+      setUsdNotional(totalValue)
+    } else {
+      setUsdNotional("")
+    }
+  }, [amount, oraclePrice])
 
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (!isConnected) {
-      alert("Please connect your wallet first")
+
+    if (!isConnected || !address) {
+      alert("Please connect your wallet")
       return
     }
 
-    if (!price || !amount) {
-      alert("Please enter price and amount")
+    if (!amount || !oraclePrice) {
+      alert("Please enter an amount")
       return
     }
 
-    setIsPlacingOrder(true)
-    
     try {
-      // TODO: Implement order placement logic
-      console.log("Placing order:", { type, price, amount, total })
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      alert(`${type === "buy" ? "Buy" : "Sell"} order placed successfully!`)
-      
-      // Reset form
-      setPrice("")
-      setAmount("")
-    } catch (error) {
-      console.error("Error placing order:", error)
-      alert("Failed to place order")
-    } finally {
-      setIsPlacingOrder(false)
-    }
-  }, [isConnected, price, amount, total, type])
+      const result = await placeOrder({
+        baseToken: token.address,
+        quoteToken: orderType === "buy" ? CONTRACTS.lamal : CONTRACTS.origami,
+        isBuy: orderType === "buy",
+        price: oraclePrice,
+        amount, // ACOL amount
+        approveMax: true,
+      })
 
-  const isBuy = type === "buy"
+      if (result.success) {
+        alert(`Order placed successfully! TX: ${result.txHash}`)
+        setAmount("")
+        setUsdNotional("")
+      } else {
+        alert(`Error placing order: ${result.error}`)
+      }
+    } catch (error) {
+      console.error("Error submitting order:", error)
+      alert("Failed to place order")
+    }
+  }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 mt-6">
-      <div className="space-y-2">
-        <Label htmlFor="price">Price</Label>
-        <Input
-          id="price"
-          type="number"
-          step="0.01"
-          placeholder="0.00"
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          disabled={isPlacingOrder}
-        />
-      </div>
+    <div className="rounded-lg border bg-card p-6">
+      <Tabs value={orderType} onValueChange={(v) => setOrderType(v as "buy" | "sell")}>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="buy">Buy</TabsTrigger>
+          <TabsTrigger value="sell">Sell</TabsTrigger>
+        </TabsList>
 
-      <div className="space-y-2">
-        <Label htmlFor="amount">Amount</Label>
-        <Input
-          id="amount"
-          type="number"
-          step="0.0001"
-          placeholder="0.0000"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          disabled={isPlacingOrder}
-        />
-      </div>
+        <TabsContent value={orderType} className="space-y-4 pt-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Oracle Price Display (Read-only) */}
+            <div className="space-y-2">
+              <Label>Oracle Price (from Pyth)</Label>
+              <div className="rounded-md border bg-muted px-3 py-2 text-sm">
+                {priceLoading ? (
+                  <span className="text-muted-foreground">Loading price...</span>
+                ) : oraclePrice ? (
+                  <span className="font-mono">${oraclePrice}</span>
+                ) : (
+                  <span className="text-destructive">Price unavailable</span>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Price is fetched from Pyth oracle and cannot be edited
+              </p>
+            </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="total">Total</Label>
-        <Input
-          id="total"
-          type="text"
-          value={total}
-          readOnly
-          disabled
-          className="bg-muted"
-        />
-      </div>
+            {/* Amount Input */}
+            <div className="space-y-2">
+              <Label htmlFor="amount">Amount ({token.symbol})</Label>
+              <Input
+                id="amount"
+                type="number"
+                step="0.000001"
+                min="0"
+                placeholder="0.00"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={priceLoading || !oraclePrice || isPlacing || isApproving}
+              />
+              <p className="text-xs text-muted-foreground">Enter amount in ACOL. We'll approve (if needed) then place your order.</p>
+            </div>
 
-      <Button
-        type="submit"
-        className="w-full"
-        variant={isBuy ? "default" : "destructive"}
-        disabled={!isConnected || isPlacingOrder || !price || !amount}
-      >
-        {!isConnected
-          ? "Connect Wallet"
-          : isPlacingOrder
-          ? `Placing ${isBuy ? "Buy" : "Sell"} Order...`
-          : `${isBuy ? "Buy" : "Sell"} ${TOKENS.LAMAL.symbol}`}
-      </Button>
+            {/* Total Display */}
+            <div className="space-y-2">
+              <Label>Notional (USD / ACOL)</Label>
+              <div className="rounded-md border bg-muted px-3 py-2 text-sm flex items-center justify-between">
+                <span className="font-mono">{usdNotional ? `$${usdNotional}` : "$0.00"}</span>
+                {oraclePrice && amount && (
+                  <span className="text-xs text-muted-foreground ml-2">{amount} {token.symbol}</span>
+                )}
+              </div>
+            </div>
 
-      {isConnected && (
-        <div className="text-xs text-muted-foreground space-y-1">
-          <div className="flex justify-between">
-            <span>Available:</span>
-            <span>0.0000 {isBuy ? TOKENS.ORIGAMI.symbol : TOKENS.LAMAL.symbol}</span>
-          </div>
-        </div>
-      )}
-    </form>
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!isConnected || isPlacing || isApproving || priceLoading || !oraclePrice || !amount}
+            >
+              {!isConnected
+                ? "Connect Wallet"
+                : isApproving
+                ? "Approving..."
+                : isPlacing
+                ? (step === "approving" ? "Awaiting Approval..." : step === "placing" ? "Placing Order..." : "Processing...")
+                : `${orderType === "buy" ? "Buy" : "Sell"} ${token.symbol}`}
+            </Button>
+            {step !== "idle" && step !== "done" && step !== "error" && (
+              <p className="text-xs text-muted-foreground text-center">Step: {step}</p>
+            )}
+            {step === "error" && (
+              <p className="text-xs text-destructive text-center">Order failed. Check balance & allowance.</p>
+            )}
+          </form>
+        </TabsContent>
+      </Tabs>
+    </div>
   )
-}
-
-// Token reference
-const TOKENS = {
-  LAMAL: { symbol: "LML" },
-  ORIGAMI: { symbol: "OG" },
 }

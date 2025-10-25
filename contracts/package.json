@@ -9,6 +9,8 @@
     "format:fix": "prettier --write --plugin=prettier-plugin-solidity 'contracts/*.sol'",
     "slither:lint": "slither 'contracts/'",
     "compile": "npx hardhat build",
+    "deploy:token": "npx hardhat ignition deploy ./ignition/modules/Token.ts --network arcologyTestnet",
+    "deploy:clob": "npx hardhat ignition deploy ./ignition/modules/CLOB.ts --network arcologyTestnet",
     "test": "npx hardhat test"
   },
   "devDependencies": {

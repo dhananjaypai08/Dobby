@@ -1,90 +1,122 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { formatNumber } from "../../lib/utils"
-import { type OrderBookEntry } from "../../types"
+import { useOrderBook } from "../../hooks/useCLOB"
 
-export function OrderBook() {
-  const [buyOrders, setBuyOrders] = useState<OrderBookEntry[]>([])
-  const [sellOrders, setSellOrders] = useState<OrderBookEntry[]>([])
+interface OrderBookProps {
+  tokenPair: "LAMAL" | "ORIGAMI"
+}
 
-  // Mock data for demonstration
-  useEffect(() => {
-    const mockBuyOrders: OrderBookEntry[] = [
-      { price: "2450.50", amount: "1.5", total: "3675.75", timestamp: Date.now() },
-      { price: "2450.00", amount: "2.3", total: "5635.00", timestamp: Date.now() },
-      { price: "2449.50", amount: "0.8", total: "1959.60", timestamp: Date.now() },
-      { price: "2449.00", amount: "3.1", total: "7591.90", timestamp: Date.now() },
-      { price: "2448.50", amount: "1.2", total: "2938.20", timestamp: Date.now() },
-    ]
+export function OrderBookPanel({ tokenPair }: OrderBookProps) {
+  const { orderBook, loading, error } = useOrderBook(5000) // Refresh every 5 seconds
 
-    const mockSellOrders: OrderBookEntry[] = [
-      { price: "2451.00", amount: "1.8", total: "4411.80", timestamp: Date.now() },
-      { price: "2451.50", amount: "2.1", total: "5148.15", timestamp: Date.now() },
-      { price: "2452.00", amount: "0.9", total: "2206.80", timestamp: Date.now() },
-      { price: "2452.50", amount: "3.4", total: "8338.50", timestamp: Date.now() },
-      { price: "2453.00", amount: "1.6", total: "3924.80", timestamp: Date.now() },
-    ]
+  if (loading && orderBook.buyOrders.length === 0) {
+    return (
+      <div className="rounded-lg border bg-card p-6">
+        <h3 className="text-lg font-semibold mb-4">Order Book</h3>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-muted-foreground">Loading order book...</p>
+        </div>
+      </div>
+    )
+  }
 
-    setBuyOrders(mockBuyOrders)
-    setSellOrders(mockSellOrders)
-  }, [])
+  if (error) {
+    return (
+      <div className="rounded-lg border bg-card p-6">
+        <h3 className="text-lg font-semibold mb-4">Order Book</h3>
+        <div className="flex items-center justify-center h-64">
+          <p className="text-destructive">Error loading order book: {error.message}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="space-y-4">
-      {/* Sell Orders */}
-      <div className="space-y-1">
-        <div className="grid grid-cols-3 text-xs text-muted-foreground pb-2 border-b border-border/50">
-          <div>Price</div>
+    <div className="rounded-lg border bg-card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">Order Book</h3>
+        {loading && (
+          <span className="text-xs text-muted-foreground animate-pulse">Updating...</span>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="grid grid-cols-3 gap-4 text-xs font-medium text-muted-foreground pb-2 border-b">
+          <div>Price (USD)</div>
           <div className="text-right">Amount</div>
-          <div className="text-right">Total</div>
+          <div className="text-right">Total (USD)</div>
         </div>
-        {sellOrders.map((order, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-3 text-sm py-1 hover:bg-destructive/10 transition-colors cursor-pointer"
-          >
-            <div className="text-destructive font-medium">
-              {formatNumber(parseFloat(order.price), 2)}
-            </div>
-            <div className="text-right text-muted-foreground">
-              {formatNumber(parseFloat(order.amount), 4)}
-            </div>
-            <div className="text-right text-muted-foreground">
-              {formatNumber(parseFloat(order.total), 2)}
-            </div>
-          </div>
-        ))}
-      </div>
 
-      {/* Spread */}
-      <div className="py-3 text-center border-y border-border/50">
-        <div className="text-xs text-muted-foreground">Spread</div>
-        <div className="text-sm font-semibold">
-          {sellOrders.length > 0 && buyOrders.length > 0
-            ? formatNumber(parseFloat(sellOrders[0].price) - parseFloat(buyOrders[0].price), 2)
-            : "0.00"}
+        {/* Sell Orders (Ask) */}
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-destructive mb-2">Sell Orders</div>
+          {orderBook.sellOrders.length === 0 ? (
+            <div className="text-xs text-muted-foreground text-center py-4">
+              No sell orders
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {orderBook.sellOrders.slice(0, 10).map((order, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-3 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
+                >
+                  <div className="text-destructive font-mono">{parseFloat(order.price).toFixed(2)}</div>
+                  <div className="text-right font-mono">{parseFloat(order.amount).toFixed(4)}</div>
+                  <div className="text-right font-mono">{order.total}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Buy Orders */}
-      <div className="space-y-1">
-        {buyOrders.map((order, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-3 text-sm py-1 hover:bg-success/10 transition-colors cursor-pointer"
-          >
-            <div className="text-success font-medium">
-              {formatNumber(parseFloat(order.price), 2)}
-            </div>
-            <div className="text-right text-muted-foreground">
-              {formatNumber(parseFloat(order.amount), 4)}
-            </div>
-            <div className="text-right text-muted-foreground">
-              {formatNumber(parseFloat(order.total), 2)}
-            </div>
+        {/* Current Price Indicator */}
+        <div className="py-3 text-center border-y">
+          <div className="text-2xl font-bold font-mono">
+            {orderBook.sellOrders.length > 0 && orderBook.buyOrders.length > 0
+              ? `$${((parseFloat(orderBook.sellOrders[orderBook.sellOrders.length - 1]?.price || "0") +
+                  parseFloat(orderBook.buyOrders[0]?.price || "0")) /
+                2).toFixed(2)}`
+              : orderBook.sellOrders.length > 0
+              ? `$${parseFloat(orderBook.sellOrders[orderBook.sellOrders.length - 1].price).toFixed(2)}`
+              : orderBook.buyOrders.length > 0
+              ? `$${parseFloat(orderBook.buyOrders[0].price).toFixed(2)}`
+              : "—"}
           </div>
-        ))}
+          <div className="text-xs text-muted-foreground mt-1">Current Spread</div>
+        </div>
+
+        {/* Buy Orders (Bid) */}
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-green-500 mb-2">Buy Orders</div>
+          {orderBook.buyOrders.length === 0 ? (
+            <div className="text-xs text-muted-foreground text-center py-4">
+              No buy orders
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {orderBook.buyOrders.slice(0, 10).map((order, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-3 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
+                >
+                  <div className="text-green-500 font-mono">{parseFloat(order.price).toFixed(2)}</div>
+                  <div className="text-right font-mono">{parseFloat(order.amount).toFixed(4)}</div>
+                  <div className="text-right font-mono">{order.total}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Empty State */}
+        {orderBook.buyOrders.length === 0 && orderBook.sellOrders.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground mb-2">No orders in the book</p>
+            <p className="text-sm text-muted-foreground">Be the first to place an order!</p>
+          </div>
+        )}
       </div>
     </div>
   )
