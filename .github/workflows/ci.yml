@@ -55,5 +55,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - run: npm install -g solhint
+        shell: bash
       - run: npm run lint
         shell: bash
