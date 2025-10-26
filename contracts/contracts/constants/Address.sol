@@ -6,7 +6,7 @@ pragma solidity ^0.8.19;
 /// @author Dhananjay Pai
 contract Address {
     /// @notice ORIGAMI token address
-    address public constant ORIGAMI = 0x005F9d345a264582028bcc5ed5E1CBBEd444e9c8;
+    address public constant ORIGAMI = 0x1DBac9A4ae262FeAA8308F4053a4D389e1C5FC59;
     /// @notice LAMAL token address
-    address public constant LAMAL = 0xD167957474234d33eaa76526ded297626151E1a5;
+    address public constant LAMAL = 0x1f62E764640675a8c286d807050A6f09E5Bd0DBa;
 }

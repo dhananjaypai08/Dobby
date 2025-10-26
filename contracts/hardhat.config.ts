@@ -35,6 +35,12 @@ const config: HardhatUserConfig = {
       type: "edr-simulated",
       chainType: "l1",
     },
+    sepolia:{
+      type: "http",
+      chainType: "l1",
+      url: "https://sepolia.infura.io/v3/2WCbZ8YpmuPxUtM6PzbFOfY5k4B",
+      accounts: [configVariable("PRIVATE_KEY")],
+    },
     arcologyTestnet: {
       type: "http",
       chainType: "l1",

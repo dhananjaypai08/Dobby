@@ -26,9 +26,9 @@ These addresses come from `contracts/ignition/deployments/chain-118/deployed_add
 
 | Module Artifact | Address |
 |-----------------|-------------------------------------------|
-| TokenModule#TokenId1_v001 | 0x005F9d345a264582028bcc5ed5E1CBBEd444e9c8 |
-| TokenModule#TokenId2_v001 | 0xD167957474234d33eaa76526ded297626151E1a5 |
-| CLOBModule#CLOB | 0x41aE1e9c5eAabaA60882AD3729c1bd0fEeD74325 |
+| TokenModule#TokenId1_v001 | 0x1DBac9A4ae262FeAA8308F4053a4D389e1C5FC59 |
+| TokenModule#TokenId2_v001 | 0x1f62E764640675a8c286d807050A6f09E5Bd0DBa |
+| CLOBModule#CLOB | 0x522973dC9c688b05704D1939706b0081Fc4f519A |
 
 > Note: Addresses are environment / deployment specific. Always confirm against the intended chain ID before interacting.
 
@@ -113,11 +113,6 @@ Core components:
 - Writes are minimized to touched price levels and user balance partitions.
 - No shared mutable iterative cursor across independent price slices; each slice maintains its own pointer.
 - Reentrancy gates protect multi-phase match/commit sequence.
-
-## Extending
-- Add advanced order types (IOC, FOK) by wrapping validation before insertion.
-- Introduce fee model by augmenting commit phase to siphon spreads/commissions to treasury address.
-- Add risk engine hook for per-account margin checks using pre-commit aggregated deltas.
 
 ## Linting & Formatting
 Solidity lint (requires `solhint` devDependency if added):
