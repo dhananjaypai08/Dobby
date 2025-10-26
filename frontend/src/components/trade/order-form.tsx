@@ -50,12 +50,17 @@ export function OrderForm({ tokenPair }: OrderFormProps) {
     }
 
     try {
+      // Define a static pair mapping: treat the selected token as the base token, the other as quote
+      const pair = tokenPair === 'LAMAL'
+        ? { base: CONTRACTS.lamal, quote: CONTRACTS.origami }
+        : { base: CONTRACTS.origami, quote: CONTRACTS.lamal }
+
       const result = await placeOrder({
-        baseToken: token.address,
-        quoteToken: orderType === "buy" ? CONTRACTS.lamal : CONTRACTS.origami,
-        isBuy: orderType === "buy",
+        baseToken: pair.base,
+        quoteToken: pair.quote,
+        isBuy: orderType === "buy", // buy = spend quote, receive base
         price: oraclePrice,
-        amount, // ACOL amount
+        amount, // base token amount
         approveMax: true,
       })
 

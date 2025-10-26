@@ -1,0 +1,13 @@
+{
+  "buyOrders": [],
+  "sellOrders": [],
+  "filledOrders": [
+    {
+      "price": "4035.18",
+      "amount": "1",
+      "timestamp": 1761479336653,
+      "takerSide": "sell",
+      "makerSide": "buy"
+    }
+  ]
+}
