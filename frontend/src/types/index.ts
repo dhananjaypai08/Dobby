@@ -20,6 +20,8 @@ export interface DecodedOrder {
   trader: string
   baseToken: string
   quoteToken: string
+  baseSymbol?: string
+  quoteSymbol?: string
   isBuy: boolean
   price: string
   amount: string
@@ -36,6 +38,8 @@ export interface OrderBookEntry {
   amount: string
   total: string
   timestamp: number
+  baseSymbol?: string
+  quoteSymbol?: string
 }
 
 /**
@@ -55,6 +59,15 @@ export interface Trade {
   price: string
   amount: string
   timestamp: number
+  txHash: string
+}
+
+// On-chain OrderFill event (contract does NOT emit price; UI may show '-')
+export interface OrderFillEvent {
+  buyer: string
+  seller: string
+  amount: string
+  timestamp: number // ms epoch
   txHash: string
 }
 

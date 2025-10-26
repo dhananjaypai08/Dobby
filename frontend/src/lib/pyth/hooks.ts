@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { getLatestPrice, streamPriceUpdates, formatPythPrice } from "./client"
 import { PYTH_CONFIG } from "../../lib/contracts/addresses"
 import { type PriceData } from "../../types"
@@ -15,29 +15,83 @@ export function usePythPrice(feedId: string) {
   const [error, setError] = useState<Error | null>(null)
   const [lastUpdate, setLastUpdate] = useState<number>(0)
 
+  // Track last accepted numeric price to detect and correct scaling glitches
+  const lastPriceRef = useRef<number | null>(null)
+
   const updatePrice = useCallback((data: any) => {
     try {
-      if (data.parsed && data.parsed.length > 0) {
-        const priceData = data.parsed[0]
-        const formattedPrice = formatPythPrice(
-          priceData.price.price,
-          priceData.price.expo
-        )
-        const formattedConf = formatPythPrice(
-          priceData.price.conf,
-          priceData.price.expo
-        )
-        
-        setPrice(formattedPrice)
-        setConfidence(formattedConf)
-        setLastUpdate(priceData.price.publish_time)
-        setLoading(false)
+      if (!data?.parsed?.length) return
+      // Find the entry that matches our requested feed id; fall back to first if none matches
+      const entry = data.parsed.find((p: any) => p.id === feedId || p.price_feed_id === feedId || p.priceFeedId === feedId) || data.parsed[0]
+      if (!entry) return
+      const priceData = entry
+      const expo: number = priceData.price.expo
+      const rawPriceNum = Number(priceData.price.price)
+      const rawConfNum = Number(priceData.price.conf)
+
+      // Candidate A: standard Pyth scaling price * 10^expo
+      let candidateA = rawPriceNum * Math.pow(10, expo)
+      // Candidate B: inverse scaling (in case incoming feed already adjusted)
+      let candidateB = expo !== 0 ? rawPriceNum / Math.pow(10, expo) : rawPriceNum
+
+      // Heuristic: if exponent negative and raw already "small", treat raw as already scaled
+      if (expo < 0 && rawPriceNum < 1e6) {
+        candidateA = rawPriceNum
+        candidateB = rawPriceNum
       }
+
+      const ratio = (a: number, b: number) => (a > b ? a / b : b / a)
+
+      // Select candidate minimizing jump vs last accepted; fall back to plausibility range
+      let chosen = candidateA
+      const last = lastPriceRef.current
+      if (last !== null) {
+        const rA = ratio(candidateA, last)
+        const rB = ratio(candidateB, last)
+        // If one candidate is wildly off (>50x movement) prefer the other
+        if (rA > 50 && rB <= 50) chosen = candidateB
+        else if (rB > 50 && rA <= 50) chosen = candidateA
+        else if (rA > 50 && rB > 50) {
+          // Both implausible – ignore this update
+          return
+        } else {
+          chosen = rA <= rB ? candidateA : candidateB
+        }
+      } else {
+        // First price: prefer candidate that lands in a plausible human range for USD-like tokens
+        if (!(candidateA > 0.0001 && candidateA < 1e7) && (candidateB > 0.0001 && candidateB < 1e7)) {
+          chosen = candidateB
+        }
+      }
+
+      // Additional sanity clamp: drop if absurd
+      if (!(chosen > 0 && chosen < 1e9)) return
+
+      lastPriceRef.current = chosen
+
+      // Derive scaling factor actually used relative to raw to scale confidence similarly
+      const factorUsed = rawPriceNum !== 0 ? chosen / rawPriceNum : 0
+      const confDisplay = rawConfNum * factorUsed
+
+      setPrice(chosen.toFixed(2))
+      setConfidence(confDisplay > 0 ? confDisplay.toFixed(2) : null)
+      setLastUpdate(priceData.price.publish_time)
+      setLoading(false)
     } catch (err) {
       console.error("Error updating price:", err)
       setError(err as Error)
     }
   }, [])
+
+  // Reset state when feed id changes so previous feed's price doesn't linger
+  useEffect(() => {
+    lastPriceRef.current = null
+    setPrice(null)
+    setConfidence(null)
+    setLoading(true)
+    setError(null)
+    setLastUpdate(0)
+  }, [feedId])
 
   useEffect(() => {
     let eventSource: EventSource | null = null

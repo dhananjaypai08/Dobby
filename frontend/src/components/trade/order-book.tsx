@@ -44,10 +44,11 @@ export function OrderBookPanel({ tokenPair }: OrderBookProps) {
 
       <div className="space-y-4">
         {/* Header */}
-        <div className="grid grid-cols-3 gap-4 text-xs font-medium text-muted-foreground pb-2 border-b">
+        <div className="grid grid-cols-4 gap-4 text-xs font-medium text-muted-foreground pb-2 border-b">
           <div>Price (USD)</div>
           <div className="text-right">Amount</div>
           <div className="text-right">Total (USD)</div>
+          <div className="text-right">Pair</div>
         </div>
 
         {/* Sell Orders (Ask) */}
@@ -62,11 +63,12 @@ export function OrderBookPanel({ tokenPair }: OrderBookProps) {
               {orderBook.sellOrders.slice(0, 10).map((order, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-3 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
+                  className="grid grid-cols-4 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
                 >
                   <div className="text-destructive font-mono">{parseFloat(order.price).toFixed(2)}</div>
                   <div className="text-right font-mono">{parseFloat(order.amount).toFixed(4)}</div>
                   <div className="text-right font-mono">{order.total}</div>
+                  <div className="text-right font-mono text-muted-foreground">{order.baseSymbol || tokenPair}/{order.quoteSymbol || 'USD'}</div>
                 </div>
               ))}
             </div>
@@ -101,11 +103,12 @@ export function OrderBookPanel({ tokenPair }: OrderBookProps) {
               {orderBook.buyOrders.slice(0, 10).map((order, i) => (
                 <div
                   key={i}
-                  className="grid grid-cols-3 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
+                  className="grid grid-cols-4 gap-4 text-sm hover:bg-muted/50 p-1 rounded transition-colors"
                 >
                   <div className="text-green-500 font-mono">{parseFloat(order.price).toFixed(2)}</div>
                   <div className="text-right font-mono">{parseFloat(order.amount).toFixed(4)}</div>
                   <div className="text-right font-mono">{order.total}</div>
+                  <div className="text-right font-mono text-muted-foreground">{order.baseSymbol || tokenPair}/{order.quoteSymbol || 'USD'}</div>
                 </div>
               ))}
             </div>

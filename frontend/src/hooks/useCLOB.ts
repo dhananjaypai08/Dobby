@@ -6,16 +6,8 @@ import { encodeAbiParameters, parseAbiParameters, parseUnits, formatUnits, decod
 import { CONTRACTS, ARCOLOGY_NETWORK } from "../lib/contracts/addresses"
 import { CALL_FROM_ADDRESS } from "../lib/config/runtime"
 import { CLOB_ABI, ERC20_ABI } from "../lib/contracts/abi"
-import type { DecodedOrder, OrderBook, OrderBookEntry } from "../types"
-
-// Types for mock filled orders (frontend only)
-export interface FilledOrderMock {
-  price: string
-  amount: string
-  timestamp: number
-  takerSide: 'buy' | 'sell'
-  makerSide: 'buy' | 'sell'
-}
+import type { DecodedOrder, OrderBook, OrderBookEntry, OrderFillEvent } from "../types"
+import { TOKENS } from "../lib/contracts/addresses"
 
 /**
  * Hook to fetch all orders from the CLOB contract
@@ -107,33 +99,7 @@ export function useOrderBook(refreshInterval: number = 5000) {
       let aggregatedBuyOrders = aggregateOrdersByPrice(buyOrders, true)
       let aggregatedSellOrders = aggregateOrdersByPrice(sellOrders, false)
 
-      // Fallback: if contract order book is empty, try mock orders API
-      if (aggregatedBuyOrders.length === 0 && aggregatedSellOrders.length === 0) {
-        try {
-          const res = await fetch("/api/mock-orders", { cache: "no-store" })
-          if (res.ok) {
-            const data = await res.json() as { buyOrders?: any[]; sellOrders?: any[] }
-            const mapMock = (entries: any[] | undefined, isBuy: boolean) => {
-              if (!entries) return [] as OrderBookEntry[]
-              const mapped = entries.map(e => ({
-                price: String(e.price),
-                amount: String(e.amount),
-                total: (parseFloat(e.price) * parseFloat(e.amount)).toFixed(2),
-                timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
-              })) as OrderBookEntry[]
-              mapped.sort((a, b) => {
-                const pa = parseFloat(a.price); const pb = parseFloat(b.price)
-                return isBuy ? pb - pa : pa - pb
-              })
-              return mapped
-            }
-            aggregatedBuyOrders = mapMock(data.buyOrders, true)
-            aggregatedSellOrders = mapMock(data.sellOrders, false)
-          }
-        } catch (mockErr) {
-          console.warn("Mock orders fallback failed", mockErr)
-        }
-      }
+      // (Mock fallback removed – rely solely on on-chain orders)
 
       setOrderBook({
         buyOrders: aggregatedBuyOrders,
@@ -150,36 +116,7 @@ export function useOrderBook(refreshInterval: number = 5000) {
         if (anyErr.cause?.message) friendly += `: ${anyErr.cause.message}`
       }
       console.error("Error fetching orders:", err)
-      // On error also attempt mock fallback before surfacing error
-      try {
-        const res = await fetch("/api/mock-orders", { cache: "no-store" })
-        if (res.ok) {
-          const data = await res.json() as { buyOrders?: any[]; sellOrders?: any[] }
-          const mapMock = (entries: any[] | undefined, isBuy: boolean) => {
-            if (!entries) return [] as OrderBookEntry[]
-            const mapped = entries.map(e => ({
-              price: String(e.price),
-              amount: String(e.amount),
-              total: (parseFloat(e.price) * parseFloat(e.amount)).toFixed(2),
-              timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
-            })) as OrderBookEntry[]
-            mapped.sort((a, b) => {
-              const pa = parseFloat(a.price); const pb = parseFloat(b.price)
-              return isBuy ? pb - pa : pa - pb
-            })
-            return mapped
-          }
-          setOrderBook({
-            buyOrders: mapMock(data.buyOrders, true),
-            sellOrders: mapMock(data.sellOrders, false),
-          })
-          setError(new Error(friendly + " (using mock cache)"))
-        } else {
-          setError(new Error(friendly))
-        }
-      } catch {
-        setError(new Error(friendly))
-      }
+      setError(new Error(friendly))
     } finally {
       setLoading(false)
     }
@@ -195,36 +132,68 @@ export function useOrderBook(refreshInterval: number = 5000) {
 }
 
 /**
- * Hook to read filled (matched) orders from the mock JSON store.
- * Only used for demo fallback layer; polls the same API.
+ * Hook to read recent OrderFill events from the contract (no mock fallback).
+ * Since the OrderFill event does not include price, UI may show '-' for price.
  */
 export function useFilledOrders(refreshInterval: number = 5000) {
-  const [filled, setFilled] = useState<FilledOrderMock[]>([])
+  const [filled, setFilled] = useState<OrderFillEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const publicClient = usePublicClient()
 
-  const fetchFilled = useCallback(async () => {
+  const fetchFills = useCallback(async () => {
+    if (!publicClient) return
     try {
       setLoading(true)
-      const res = await fetch('/api/mock-orders', { cache: 'no-store' })
-      if (!res.ok) throw new Error(`Status ${res.status}`)
-      const data = await res.json()
-      setFilled((data.filledOrders || []).slice(-50).reverse()) // latest first, keep last 50
+      const latest = await publicClient.getBlockNumber()
+      const fromBlock = latest > 4000n ? latest - 4000n : 0n
+      const logs = await publicClient.getLogs({
+        address: CONTRACTS.clob,
+        event: {
+          type: 'event',
+          name: 'OrderFill',
+          inputs: [
+            { indexed: true, name: 'buyer', type: 'address' },
+            { indexed: true, name: 'seller', type: 'address' },
+            { indexed: false, name: 'amount', type: 'uint256' },
+            { indexed: false, name: 'timestamp', type: 'uint256' },
+          ],
+        } as const,
+        fromBlock,
+        toBlock: 'latest'
+      }) as any[]
+      const mapped: OrderFillEvent[] = logs.map(l => {
+        const buyer = l.args?.buyer as string
+        const seller = l.args?.seller as string
+        const amountRaw = l.args?.amount as bigint | undefined
+        const tsRaw = l.args?.timestamp as bigint | undefined
+        return {
+          buyer: buyer || '0x',
+          seller: seller || '0x',
+            amount: amountRaw ? formatUnits(amountRaw, 18) : '0',
+            timestamp: tsRaw ? Number(tsRaw) * 1000 : Date.now(),
+            txHash: l.transactionHash as string,
+        }
+      })
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 100)
+      setFilled(mapped)
       setError(null)
-    } catch (err: any) {
-      setError(new Error('Failed to load filled orders'))
+    } catch (err) {
+      console.error('Failed to load OrderFill logs', err)
+      setError(new Error('Failed to load fills'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [publicClient])
 
   useEffect(() => {
-    fetchFilled()
-    const int = setInterval(fetchFilled, refreshInterval)
+    fetchFills()
+    const int = setInterval(fetchFills, refreshInterval)
     return () => clearInterval(int)
-  }, [fetchFilled, refreshInterval])
+  }, [fetchFills, refreshInterval])
 
-  return { filled, loading, error, refetch: fetchFilled }
+  return { filled, loading, error, refetch: fetchFills }
 }
 
 /**
@@ -377,28 +346,7 @@ export function usePlaceOrder() {
             },
           },
         })
-        // Optimistically persist to mock order store immediately after wallet confirmation (tx hash)
-        ;(async () => {
-          try {
-            const res = await fetch('/api/mock-orders', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                side: params.isBuy ? 'buy' : 'sell',
-                price: params.price,
-                amount: params.amount,
-              })
-            })
-            if (res.ok) {
-              const json = await res.json()
-              if (json.filled) {
-                console.info('Order immediately matched (mock fill)')
-              }
-            }
-          } catch (persistErr) {
-            console.warn('Failed to persist/mock-match order', persistErr)
-          }
-        })()
+        // (Removed optimistic mock persistence)
 
         // Still await the on-chain receipt to reflect actual success state
         await publicClient.waitForTransactionReceipt({ hash })
@@ -514,18 +462,30 @@ async function decodeOrders(ordersBytes: `0x${string}`[], publicClient: any): Pr
         amount = 0n
       }
 
+      // Map token addresses to known symbols (case-insensitive)
+      const addrLower = (a: string) => a.toLowerCase()
+      const tokenSymbolFor = (addr: string) => {
+        const lower = addrLower(addr)
+        for (const key of Object.keys(TOKENS) as (keyof typeof TOKENS)[]) {
+          if (addrLower(TOKENS[key].address) === lower) return TOKENS[key].symbol
+        }
+        return 'UNKNOWN'
+      }
+
       orders.push({
         id: id.toString(),
         trader,
         baseToken,
         quoteToken,
+        baseSymbol: tokenSymbolFor(baseToken),
+        quoteSymbol: tokenSymbolFor(quoteToken),
         isBuy,
         price: price.toString(),
         amount: amount.toString(),
         timestamp: Number(timestamp),
         displayPrice: formatUnits(price, 18),
         displayAmount: formatUnits(amount, 18),
-      })
+      } as any)
     } catch (err) {
       console.error("Error decoding order:", err)
     }
@@ -535,34 +495,40 @@ async function decodeOrders(ordersBytes: `0x${string}`[], publicClient: any): Pr
 }
 
 function aggregateOrdersByPrice(orders: DecodedOrder[], isBuy: boolean): OrderBookEntry[] {
-  const priceMap = new Map<string, { amount: bigint; count: number; timestamp: number }>()
+  // Track symbol pairing per price level (if multiple, keep first encountered)
+  const priceMap = new Map<string, { amount: bigint; count: number; timestamp: number; baseSymbol: string; quoteSymbol: string }>()
 
   orders.forEach((order) => {
     const price = order.displayPrice
     const amount = BigInt(order.amount)
     const existing = priceMap.get(price)
-
     if (existing) {
       priceMap.set(price, {
         amount: existing.amount + amount,
         count: existing.count + 1,
         timestamp: Math.max(existing.timestamp, order.timestamp),
+        baseSymbol: existing.baseSymbol,
+        quoteSymbol: existing.quoteSymbol,
       })
     } else {
       priceMap.set(price, {
         amount,
         count: 1,
         timestamp: order.timestamp,
+        baseSymbol: (order as any).baseSymbol || 'BASE',
+        quoteSymbol: (order as any).quoteSymbol || 'QUOTE',
       })
     }
   })
 
-  const entries = Array.from(priceMap.entries()).map(([price, data]) => ({
+  const entries: OrderBookEntry[] = Array.from(priceMap.entries()).map(([price, data]) => ({
     price,
     amount: formatUnits(data.amount, 18),
     total: (parseFloat(price) * parseFloat(formatUnits(data.amount, 18))).toFixed(2),
     timestamp: data.timestamp,
-  }))
+    baseSymbol: data.baseSymbol,
+    quoteSymbol: data.quoteSymbol,
+  }) as any)
 
   entries.sort((a, b) => {
     const priceA = parseFloat(a.price)

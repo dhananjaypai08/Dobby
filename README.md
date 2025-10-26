@@ -28,7 +28,7 @@ These addresses come from `contracts/ignition/deployments/chain-118/deployed_add
 |-----------------|-------------------------------------------|
 | TokenModule#TokenId1_v001 | 0x1DBac9A4ae262FeAA8308F4053a4D389e1C5FC59 |
 | TokenModule#TokenId2_v001 | 0x1f62E764640675a8c286d807050A6f09E5Bd0DBa |
-| CLOBModule#CLOB | 0x522973dC9c688b05704D1939706b0081Fc4f519A |
+| CLOBModule#CLOB | 0x1A9341E9C1a65F9FF969989aF78563A454e2bb80 |
 
 > Note: Addresses are environment / deployment specific. Always confirm against the intended chain ID before interacting.
 

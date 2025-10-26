@@ -4,7 +4,7 @@ import { type ContractAddresses } from "../../types"
  * Contract addresses on Arcology Network (Chain ID: 118)
  */
 export const CONTRACTS: ContractAddresses = {
-  clob: "0x522973dC9c688b05704D1939706b0081Fc4f519A",
+  clob: "0x1A9341E9C1a65F9FF969989aF78563A454e2bb80",
   lamal: "0x1f62E764640675a8c286d807050A6f09E5Bd0DBa",
   origami: "0x1DBac9A4ae262FeAA8308F4053a4D389e1C5FC59",
 } as const
