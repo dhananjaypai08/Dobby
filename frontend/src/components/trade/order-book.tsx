@@ -20,12 +20,14 @@ export function OrderBookPanel({ tokenPair }: OrderBookProps) {
     )
   }
 
-  if (error) {
+  // Suppress verbose error output in UI; rely on console logs from hook.
+  // If there is an error and no data, show a neutral placeholder instead of the raw error message.
+  if (error && orderBook.buyOrders.length === 0 && orderBook.sellOrders.length === 0) {
     return (
       <div className="rounded-lg border bg-card p-6">
         <h3 className="text-lg font-semibold mb-4">Order Book</h3>
         <div className="flex items-center justify-center h-64">
-          <p className="text-destructive">Error loading order book: {error.message}</p>
+          <p className="text-muted-foreground">Order book Empty</p>
         </div>
       </div>
     )
