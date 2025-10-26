@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Navigation } from "../../components/navigation"
 import { OrderForm } from "../../components/trade/order-form"
 import { OrderBookPanel } from "../../components/trade/order-book"
+import { FilledOrdersPanel } from "../../components/trade/filled-orders"
 import { usePythPrice } from "../../lib/pyth/hooks"
 import { TOKENS } from "../../lib/contracts/addresses"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
@@ -66,12 +67,13 @@ export default function TradePage() {
         </div>
 
         {/* Trading Interface */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid xl:grid-cols-4 gap-6">
           {/* Order Book */}
-          <div className="lg:col-span-2">
+          <div className="xl:col-span-2">
             <OrderBookPanel tokenPair={selectedPair} />
           </div>
-
+          {/* Filled Orders */}
+            <FilledOrdersPanel />
           {/* Order Form */}
           <div>
             <OrderForm tokenPair={selectedPair} />

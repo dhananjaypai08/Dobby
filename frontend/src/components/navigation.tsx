@@ -64,5 +64,5 @@ export function Navigation() {
 const navLinks = [
   { href: "/", label: "Home" },
   { href: "/trade", label: "Trade" },
-  { href: "/portfolio", label: "Portfolio" },
+  // { href: "/portfolio", label: "Portfolio" },
 ]

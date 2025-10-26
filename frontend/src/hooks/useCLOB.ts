@@ -8,6 +8,15 @@ import { CALL_FROM_ADDRESS } from "../lib/config/runtime"
 import { CLOB_ABI, ERC20_ABI } from "../lib/contracts/abi"
 import type { DecodedOrder, OrderBook, OrderBookEntry } from "../types"
 
+// Types for mock filled orders (frontend only)
+export interface FilledOrderMock {
+  price: string
+  amount: string
+  timestamp: number
+  takerSide: 'buy' | 'sell'
+  makerSide: 'buy' | 'sell'
+}
+
 /**
  * Hook to fetch all orders from the CLOB contract
  */
@@ -95,8 +104,36 @@ export function useOrderBook(refreshInterval: number = 5000) {
       const buyOrders = await decodeOrders(buyOrdersBytes, publicClient)
       const sellOrders = await decodeOrders(sellOrdersBytes, publicClient)
 
-      const aggregatedBuyOrders = aggregateOrdersByPrice(buyOrders, true)
-      const aggregatedSellOrders = aggregateOrdersByPrice(sellOrders, false)
+      let aggregatedBuyOrders = aggregateOrdersByPrice(buyOrders, true)
+      let aggregatedSellOrders = aggregateOrdersByPrice(sellOrders, false)
+
+      // Fallback: if contract order book is empty, try mock orders API
+      if (aggregatedBuyOrders.length === 0 && aggregatedSellOrders.length === 0) {
+        try {
+          const res = await fetch("/api/mock-orders", { cache: "no-store" })
+          if (res.ok) {
+            const data = await res.json() as { buyOrders?: any[]; sellOrders?: any[] }
+            const mapMock = (entries: any[] | undefined, isBuy: boolean) => {
+              if (!entries) return [] as OrderBookEntry[]
+              const mapped = entries.map(e => ({
+                price: String(e.price),
+                amount: String(e.amount),
+                total: (parseFloat(e.price) * parseFloat(e.amount)).toFixed(2),
+                timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
+              })) as OrderBookEntry[]
+              mapped.sort((a, b) => {
+                const pa = parseFloat(a.price); const pb = parseFloat(b.price)
+                return isBuy ? pb - pa : pa - pb
+              })
+              return mapped
+            }
+            aggregatedBuyOrders = mapMock(data.buyOrders, true)
+            aggregatedSellOrders = mapMock(data.sellOrders, false)
+          }
+        } catch (mockErr) {
+          console.warn("Mock orders fallback failed", mockErr)
+        }
+      }
 
       setOrderBook({
         buyOrders: aggregatedBuyOrders,
@@ -113,7 +150,36 @@ export function useOrderBook(refreshInterval: number = 5000) {
         if (anyErr.cause?.message) friendly += `: ${anyErr.cause.message}`
       }
       console.error("Error fetching orders:", err)
-      setError(new Error(friendly))
+      // On error also attempt mock fallback before surfacing error
+      try {
+        const res = await fetch("/api/mock-orders", { cache: "no-store" })
+        if (res.ok) {
+          const data = await res.json() as { buyOrders?: any[]; sellOrders?: any[] }
+          const mapMock = (entries: any[] | undefined, isBuy: boolean) => {
+            if (!entries) return [] as OrderBookEntry[]
+            const mapped = entries.map(e => ({
+              price: String(e.price),
+              amount: String(e.amount),
+              total: (parseFloat(e.price) * parseFloat(e.amount)).toFixed(2),
+              timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
+            })) as OrderBookEntry[]
+            mapped.sort((a, b) => {
+              const pa = parseFloat(a.price); const pb = parseFloat(b.price)
+              return isBuy ? pb - pa : pa - pb
+            })
+            return mapped
+          }
+          setOrderBook({
+            buyOrders: mapMock(data.buyOrders, true),
+            sellOrders: mapMock(data.sellOrders, false),
+          })
+          setError(new Error(friendly + " (using mock cache)"))
+        } else {
+          setError(new Error(friendly))
+        }
+      } catch {
+        setError(new Error(friendly))
+      }
     } finally {
       setLoading(false)
     }
@@ -126,6 +192,39 @@ export function useOrderBook(refreshInterval: number = 5000) {
   }, [fetchOrders, refreshInterval])
 
   return { orderBook, loading, error, refetch: fetchOrders }
+}
+
+/**
+ * Hook to read filled (matched) orders from the mock JSON store.
+ * Only used for demo fallback layer; polls the same API.
+ */
+export function useFilledOrders(refreshInterval: number = 5000) {
+  const [filled, setFilled] = useState<FilledOrderMock[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<Error | null>(null)
+
+  const fetchFilled = useCallback(async () => {
+    try {
+      setLoading(true)
+      const res = await fetch('/api/mock-orders', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Status ${res.status}`)
+      const data = await res.json()
+      setFilled((data.filledOrders || []).slice(-50).reverse()) // latest first, keep last 50
+      setError(null)
+    } catch (err: any) {
+      setError(new Error('Failed to load filled orders'))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchFilled()
+    const int = setInterval(fetchFilled, refreshInterval)
+    return () => clearInterval(int)
+  }, [fetchFilled, refreshInterval])
+
+  return { filled, loading, error, refetch: fetchFilled }
 }
 
 /**
@@ -171,41 +270,73 @@ export function usePlaceOrder() {
           ? BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")
           : rawRequired
 
-        // Fetch current allowance
-        const currentAllowance = await publicClient.readContract({
-          address: spendToken,
-          abi: ERC20_ABI,
-          functionName: "allowance",
-          args: [address, CONTRACTS.clob],
-        }) as bigint
+        // Light bytecode probe (warn only – some RPCs may not expose code consistently)
+        ;(async () => {
+          try {
+            const tokenCode = await publicClient.getBytecode({ address: spendToken })
+            if (!tokenCode || tokenCode === '0x') {
+              console.warn(`WARN: Spend token ${spendToken} has no on-chain code (may not be ERC20)`)
+            }
+          } catch (probeErr) {
+            console.warn('Bytecode probe failed (non-fatal)', probeErr)
+          }
+        })()
+
+        // Fetch current allowance; on failure assume 0 and continue to approval attempt
+        let currentAllowance: bigint = 0n
+        try {
+          currentAllowance = await publicClient.readContract({
+            address: spendToken,
+            abi: ERC20_ABI,
+            functionName: "allowance",
+            args: [address, CONTRACTS.clob],
+          }) as bigint
+        } catch (allowErr: any) {
+          console.warn("Allowance read failed; proceeding with approval", allowErr)
+          currentAllowance = 0n
+        }
 
         if (currentAllowance < rawRequired) {
           setIsApproving(true)
           setStep("approving")
           try {
-            const approveHash = await walletClient.writeContract({
+            // Some ERC20s (USDT style) require first setting allowance to 0 before increasing; attempt direct approve then retry with 0 cycle.
+            const attemptApprove = async (value: bigint) => walletClient.writeContract({
               address: spendToken,
               abi: ERC20_ABI,
               functionName: "approve",
-              args: [CONTRACTS.clob, requiredAllowance],
+              args: [CONTRACTS.clob, value],
               chain: {
                 id: ARCOLOGY_NETWORK.chainId,
                 name: ARCOLOGY_NETWORK.name,
                 nativeCurrency: ARCOLOGY_NETWORK.nativeCurrency,
-                rpcUrls: {
-                  default: { http: [ARCOLOGY_NETWORK.rpcUrl] },
-                  public: { http: [ARCOLOGY_NETWORK.rpcUrl] },
-                },
+                rpcUrls: { default: { http: [ARCOLOGY_NETWORK.rpcUrl] }, public: { http: [ARCOLOGY_NETWORK.rpcUrl] } },
               },
             })
-            await publicClient.waitForTransactionReceipt({ hash: approveHash })
+
+            let approveHash: `0x${string}` | null = null
+            try {
+              approveHash = await attemptApprove(requiredAllowance)
+            } catch (firstErr) {
+              console.warn('Direct approve failed, trying reset-to-zero pattern', firstErr)
+              try {
+                const zeroHash = await attemptApprove(0n)
+                await publicClient.waitForTransactionReceipt({ hash: zeroHash })
+                approveHash = await attemptApprove(requiredAllowance)
+              } catch (retryErr) {
+                throw retryErr
+              }
+            }
+            if (approveHash) {
+              await publicClient.waitForTransactionReceipt({ hash: approveHash })
+            }
           } catch (approveErr) {
             console.error("Approval failed", approveErr)
-            setError(approveErr as Error)
+            setError(new Error(`Approval failed for token ${spendToken}: ${(approveErr as any)?.shortMessage || (approveErr as Error).message}`))
             setStep("error")
             setIsApproving(false)
             setIsPlacing(false)
-            return { success: false, error: (approveErr as Error).message }
+            return { success: false, error: `Approval failed for token ${spendToken}` }
           } finally {
             setIsApproving(false)
           }
@@ -246,7 +377,30 @@ export function usePlaceOrder() {
             },
           },
         })
+        // Optimistically persist to mock order store immediately after wallet confirmation (tx hash)
+        ;(async () => {
+          try {
+            const res = await fetch('/api/mock-orders', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                side: params.isBuy ? 'buy' : 'sell',
+                price: params.price,
+                amount: params.amount,
+              })
+            })
+            if (res.ok) {
+              const json = await res.json()
+              if (json.filled) {
+                console.info('Order immediately matched (mock fill)')
+              }
+            }
+          } catch (persistErr) {
+            console.warn('Failed to persist/mock-match order', persistErr)
+          }
+        })()
 
+        // Still await the on-chain receipt to reflect actual success state
         await publicClient.waitForTransactionReceipt({ hash })
 
         setStep("done")

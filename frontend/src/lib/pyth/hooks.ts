@@ -86,7 +86,12 @@ export function usePythPrice(feedId: string) {
  * Hook to fetch ETH/USD price specifically
  */
 export function useEthUsdPrice() {
-  return usePythPrice(PYTH_CONFIG.priceFeeds.ETH_USD)
+  // Some configurations may not expose an explicit ETH_USD key; fall back to the first configured feed.
+  // This avoids a hard type error when the key is absent in the declared type.
+  const feeds: Record<string, string> = (PYTH_CONFIG as any).priceFeeds || {}
+  const ethFeed = feeds.ETH_USD || Object.values(feeds)[0]
+  if (!ethFeed) throw new Error("No price feeds configured in PYTH_CONFIG")
+  return usePythPrice(ethFeed)
 }
 
 /**
